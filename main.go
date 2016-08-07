@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path"
 	"runtime"
+	"sort"
 	"strings"
 
 	"gopkg.in/urfave/cli.v1"
@@ -112,7 +113,7 @@ func main() {
 	*/
 }
 
-func AttemptGuess(guess string, allCiphers bool) []DecryptResult {
+func AttemptGuess(guess string, allCiphers bool) DecryptResults {
 	var ciphers []string
 	if allCiphers == true {
 		ciphers = AllCiphers
@@ -120,7 +121,7 @@ func AttemptGuess(guess string, allCiphers bool) []DecryptResult {
 		ciphers = RecommendedCiphers
 	}
 
-	var attempts = make([]DecryptResult, 0)
+	var attempts = make(DecryptResults, 0)
 
 	for _, hash := range Hashes {
 		hashPath := path.Join("hashes", hash)
@@ -136,6 +137,8 @@ func AttemptGuess(guess string, allCiphers bool) []DecryptResult {
 			attempts = append(attempts, result)
 		}
 	}
+
+	sort.Sort(attempts)
 
 	return attempts
 }

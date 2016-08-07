@@ -2,60 +2,83 @@ package main
 
 import (
 	"os/exec"
+	"regexp"
+	"strings"
 	"sync"
-	"unicode/utf8"
+	"unicode"
 )
+
+var HumanRegex = regexp.MustCompile(`[ -~]`)
 
 type Decrypt struct {
 	Ciphers  []string
 	HashPath string
+	Results  DecryptResults
 }
 
 type DecryptResult struct {
-	Cipher          string
-	HashBase64      string
-	HashFile        string
-	HumanCharacters int
-	Result          []byte
+	Cipher       string
+	HashBase64   string
+	HashFile     string
+	Rank         float64
+	Result       []byte
+	ResultString string
 }
 
-func (d *Decrypt) Attempt(guess string) []DecryptResult {
-	messages := make(chan map[string][]byte)
+type DecryptResults []DecryptResult
+
+func (slice DecryptResults) Len() int {
+	return len(slice)
+}
+
+func (slice DecryptResults) Less(i, j int) bool {
+	return slice[i].Rank < slice[j].Rank
+}
+
+func (slice DecryptResults) Swap(i, j int) {
+	slice[i], slice[j] = slice[j], slice[i]
+}
+
+func (d *Decrypt) Attempt(guess string) DecryptResults {
+	//messages := make(chan map[string][]byte)
 	var wg sync.WaitGroup
 
 	wg.Add(len(d.Ciphers))
+
+	results := make(DecryptResults, 0)
 
 	for _, cipher := range d.Ciphers {
 		go func(hashPath string, guess string, cipher string) {
 			defer wg.Done()
 
-			result := make(map[string][]byte)
+			rank := 0.00
 
-			out, _ := d.opensslDecrypt(cipher, hashPath, guess)
+			out, err := d.opensslDecrypt(cipher, hashPath, guess)
+			if err == nil {
+				rank += 1.00
+			}
 
-			result[cipher] = out
+			stringOut := strings.Trim(string(out), "\n")
 
-			messages <- result
+			if len(stringOut) > 10 && len(stringOut) < 93 {
+				rank += 1.00
+			}
+
+			// This is it!
+			if IsAsciiPrintable(stringOut) && stringOut != "" {
+				rank = 5.00
+			}
+
+			results = append(results, DecryptResult{
+				Cipher:       cipher,
+				HashFile:     d.HashPath,
+				Result:       out,
+				ResultString: stringOut,
+				Rank:         rank,
+			})
 		}(d.HashPath, guess, cipher)
 
 	}
-
-	results := make([]DecryptResult, 0)
-
-	go func() {
-		for response := range messages {
-			for cipher, res := range response {
-
-				_, size := utf8.DecodeLastRuneInString(string(res))
-				results = append(results, DecryptResult{
-					Cipher:          cipher,
-					HashFile:        d.HashPath,
-					Result:          res,
-					HumanCharacters: size,
-				})
-			}
-		}
-	}()
 
 	wg.Wait()
 	return results
@@ -63,4 +86,13 @@ func (d *Decrypt) Attempt(guess string) []DecryptResult {
 
 func (d *Decrypt) opensslDecrypt(cipher string, hashPath string, guess string) ([]byte, error) {
 	return exec.Command("openssl", cipher, "-d", "-a", "-in", hashPath, "-pass", "pass:"+guess).Output()
+}
+
+func IsAsciiPrintable(s string) bool {
+	for _, r := range s {
+		if r > unicode.MaxASCII || !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
 }

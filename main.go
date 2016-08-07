@@ -1,28 +1,18 @@
 package main
 
 import (
-	"encoding/json"
-	"io"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"path"
 	"runtime"
 	"strings"
-	"sync"
+
+	"gopkg.in/urfave/cli.v1"
 )
-
-type Output struct {
-	Results []AttemptResult
-}
-
-type AttemptResult struct {
-	Cipher       string
-	HashBase64   string
-	HashFile     string
-	ResultBase64 []byte
-}
 
 var AllCiphers []string
 var RecommendedCiphers = []string{
@@ -75,82 +65,82 @@ func main() {
 	AllCiphers = setupCiphers()
 	Hashes = setupHashes()
 
-	http.HandleFunc("/", processGuess)
-	http.ListenAndServe(":8000", nil)
+	app := cli.NewApp()
+	app.Name = "gol-guesser"
+	app.Usage = "Attempt password guesses against the Sombra ARG summer games crypto!"
+	app.Version = "1.0.0"
+	app.Commands = []cli.Command{
+		{
+			Name:  "web",
+			Usage: "Start up the API webserver",
+			Action: func(c *cli.Context) error {
+
+				ws := WebServer{
+					Port: "8080",
+				}
+				ws.Start()
+
+				return nil
+			},
+		},
+		{
+			Name:  "guess",
+			Usage: "Attempt a guess on the command line",
+			Flags: []cli.Flag{
+				cli.BoolTFlag{
+					Name:  "all-ciphers",
+					Usage: "All ciphers",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				attempts := AttemptGuess(c.Args().First(), c.BoolT("all-ciphers"))
+
+				for _, attempt := range attempts {
+					fmt.Printf("%s - %s: %s \n", attempt.HashFile, attempt.Cipher, attempt.Result)
+				}
+
+				return nil
+			},
+		},
+	}
+
+	app.Run(os.Args)
+
+	/*
+		http.HandleFunc("/", processGuess)
+		http.ListenAndServe(":8000", nil)
+	*/
 }
 
-func processGuess(w http.ResponseWriter, r *http.Request) {
-	passwordArg := r.URL.Query().Get("password")
-	ciphersArg := r.URL.Query().Get("ciphers")
-
+func AttemptGuess(guess string, allCiphers bool) []DecryptResult {
 	var ciphers []string
-	if ciphersArg == "all" {
+	if allCiphers == true {
 		ciphers = AllCiphers
 	} else {
 		ciphers = RecommendedCiphers
 	}
 
-	var attempts = make([]AttemptResult, 0)
+	var attempts = make([]DecryptResult, 0)
 
 	for _, hash := range Hashes {
 		hashPath := path.Join("hashes", hash)
 
-		cipherResults := attemptCiphers(ciphers, hashPath, passwordArg)
+		decrypter := Decrypt{
+			Ciphers:  ciphers,
+			HashPath: hashPath,
+		}
+
+		cipherResults := decrypter.Attempt(guess)
 
 		for _, result := range cipherResults {
 			attempts = append(attempts, result)
 		}
 	}
 
-	b, err := json.Marshal(attempts)
-	if err != nil {
-		log.Println(err)
-	}
-
-	io.WriteString(w, string(b))
+	return attempts
 }
 
-func attemptCiphers(ciphers []string, hashPath string, guess string) []AttemptResult {
-	messages := make(chan map[string][]byte)
-	var wg sync.WaitGroup
-
-	wg.Add(len(ciphers))
-
-	for _, cipher := range ciphers {
-		go func(hashPath string, guess string, cipher string) {
-			defer wg.Done()
-
-			result := make(map[string][]byte)
-
-			out, _ := attempt(hashPath, guess, cipher)
-
-			result[cipher] = out
-
-			messages <- result
-		}(hashPath, guess, cipher)
-
-	}
-
-	results := make([]AttemptResult, 0)
-
-	go func() {
-		for response := range messages {
-			for cipher, res := range response {
-				results = append(results, AttemptResult{
-					Cipher:       cipher,
-					HashFile:     hashPath,
-					ResultBase64: res,
-				})
-			}
-		}
-	}()
-
-	wg.Wait()
-	return results
-}
-
-func attempt(hashPath string, guess string, cipher string) ([]byte, error) {
-	return exec.Command("openssl", cipher, "-d", "-a", "-in", hashPath, "-pass", "pass:"+guess).Output()
+func processGuess(w http.ResponseWriter, r *http.Request) {
 }
 
 func setupCiphers() []string {

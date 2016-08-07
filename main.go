@@ -74,10 +74,17 @@ func main() {
 		{
 			Name:  "web",
 			Usage: "Start up the API webserver",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "port",
+					Usage: "Port to run on",
+					Value: "3000",
+				},
+			},
 			Action: func(c *cli.Context) error {
 
 				ws := WebServer{
-					Port: "8080",
+					Port: c.String("port"),
 				}
 				ws.Start()
 

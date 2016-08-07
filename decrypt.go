@@ -3,12 +3,14 @@ package main
 import (
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
 )
 
 var HumanRegex = regexp.MustCompile(`[ -~]`)
+var WordRegex = regexp.MustCompile(`\w+`)
 
 type Decrypt struct {
 	Ciphers  []string
@@ -59,14 +61,26 @@ func (d *Decrypt) Attempt(guess string) DecryptResults {
 			}
 
 			stringOut := strings.Trim(string(out), "\n")
+			printable := AsciiPrintable(stringOut)
 
-			if len(stringOut) > 10 && len(stringOut) < 93 {
+			if WordRegex.MatchString(stringOut) {
 				rank += 1.00
 			}
 
+			add, _ := strconv.ParseFloat("0."+strconv.Itoa(printable), 64)
+			rank += add
+
+			diff := len(stringOut) - printable
+			sub, _ := strconv.ParseFloat("0."+strconv.Itoa(diff), 64)
+			rank -= sub
+
 			// This is it!
-			if IsAsciiPrintable(stringOut) && stringOut != "" {
+			if printable == len(stringOut) {
 				rank = 5.00
+			}
+
+			if stringOut == "" {
+				rank = 0.00
 			}
 
 			results = append(results, DecryptResult{
@@ -88,11 +102,13 @@ func (d *Decrypt) opensslDecrypt(cipher string, hashPath string, guess string) (
 	return exec.Command("openssl", cipher, "-d", "-a", "-in", hashPath, "-pass", "pass:"+guess).Output()
 }
 
-func IsAsciiPrintable(s string) bool {
+func AsciiPrintable(s string) int {
+	count := 0
 	for _, r := range s {
-		if r > unicode.MaxASCII || !unicode.IsPrint(r) {
-			return false
+		if unicode.IsPrint(r) && r < unicode.MaxASCII {
+			count++
 		}
+
 	}
-	return true
+	return count
 }

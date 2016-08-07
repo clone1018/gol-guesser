@@ -32,7 +32,7 @@ func (slice DecryptResults) Len() int {
 }
 
 func (slice DecryptResults) Less(i, j int) bool {
-	return slice[i].Rank < slice[j].Rank
+	return slice[i].Rank > slice[j].Rank
 }
 
 func (slice DecryptResults) Swap(i, j int) {

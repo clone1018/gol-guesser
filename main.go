@@ -130,6 +130,8 @@ func AttemptGuess(guess string, allCiphers bool) DecryptResults {
 
 	var attempts = make(DecryptResults, 0)
 
+	log.Println("Attempting guess: " + guess)
+
 	for _, hash := range Hashes {
 		hashPath := path.Join("hashes", hash)
 

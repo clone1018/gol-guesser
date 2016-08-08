@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -53,11 +54,11 @@ func (d *Decrypt) Attempt(guess string) DecryptResults {
 		go func(hashPath string, guess string, cipher string) {
 			defer wg.Done()
 
-			rank := 0.00
+			rank := 1.00
 
 			out, err := d.opensslDecrypt(cipher, hashPath, guess)
-			if err == nil {
-				rank += 1.00
+			if err != nil {
+				out = []byte("")
 			}
 
 			stringOut := strings.Trim(string(out), "\n")
@@ -79,13 +80,19 @@ func (d *Decrypt) Attempt(guess string) DecryptResults {
 				rank = 5.00
 			}
 
-			if stringOut == "" {
+			if stringOut == "" || stringOut == "bad decrypt" {
 				rank = 0.00
 			}
 
+			if rank > 3.00 {
+				log.Println("Found potential answer with > 3.00 rank: " + guess)
+			}
+
+			saneHash := strings.Replace(d.HashPath, "hashes/", "", 1)
+
 			results = append(results, DecryptResult{
 				Cipher:       cipher,
-				HashFile:     d.HashPath,
+				HashFile:     saneHash,
 				Result:       out,
 				ResultString: stringOut,
 				Rank:         rank,

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 
@@ -39,8 +38,13 @@ func (ws *WebServer) GuessHandler(w http.ResponseWriter, r *http.Request) {
 	b, err := json.Marshal(attempts)
 	if err != nil {
 		log.Println(err)
+		w.Write([]byte("Fatal untracked error"))
+		return
 	}
 
-	io.WriteString(w, string(b))
+	w.Header().Add("Cache-Control", "public, max-age=25565")
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
+	w.Header().Add("Access-Control-Allow-Origin", "*")
+	w.Write(b)
 
 }

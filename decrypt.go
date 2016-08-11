@@ -11,7 +11,7 @@ import (
 )
 
 var HumanRegex = regexp.MustCompile(`[ -~]`)
-var WordRegex = regexp.MustCompile(`\w+`)
+var WordRegex = regexp.MustCompile(`[\wíáóúñé]+`)
 
 type Decrypt struct {
 	Ciphers  []string
@@ -112,7 +112,7 @@ func (d *Decrypt) opensslDecrypt(cipher string, hashPath string, guess string) (
 func AsciiPrintable(s string) int {
 	count := 0
 	for _, r := range s {
-		if unicode.IsPrint(r) && r < unicode.MaxASCII {
+		if unicode.IsPrint(r) && ( strings.ContainsRune("íáóúñé", r) || r < unicode.MaxASCII){
 			count++
 		}
 
